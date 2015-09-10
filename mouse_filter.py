@@ -15,18 +15,34 @@ from docopt import docopt
 import logging
 import sys
 
-class MouseFilter():
+
+class MouseFilter:
 
     def __init__(self, bamfile=None, outfile=None, mouse_vars=None):
+        self.handler = None
+        self.logger = logging.getLogger(__name__)
         self.setup_logging()
+        self.bam = None
+        self.load_bam(bamfile)
+        self.outfile = None
+        self.set_outfile(outfile)
+        self.headers = None
 
+        self.logger.info(
+            "Input params - \nbamfile: {}\noutfile: {}\nmouse_vars: {}".format(
+                bamfile, outfile, mouse_vars
+            )
+        )
+
+    def load_bam(self, bamfile):
         try:
-            self.bamfile = pysam.AlignmentFile(bamfile, "rb")
+            self.bam = pysam.AlignmentFile(bamfile, "rb")
         except IOError:
             self.logger.error("Cannot find bamfile: {}".format(bamfile))
             self.logger.info("Exiting")
             sys.exit(1)
 
+    def set_outfile(self, outfile):
         try:
             self.outfile = open(outfile, 'w')
         except IOError:
@@ -38,15 +54,7 @@ class MouseFilter():
             self.logger.info("Exiting")
             sys.exit(1)
 
-        self.outfile = outfile
-        self.logger.info(
-            "Input params - \nbamfile: {}\noutfile: {}\nmouse_vars: {}".format(
-                bamfile, outfile, mouse_vars
-            )
-        )
-
     def setup_logging(self):
-        self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
             self.logger.setLevel(logging.DEBUG)
             self.handler = logging.FileHandler('MouseFilter.log')
@@ -57,7 +65,17 @@ class MouseFilter():
             self.logger.addHandler(self.handler)
             self.logger.info("MouseFilter object created")
 
-    def extract_human_reads(self):
+    def show_headers(self):
+        self.headers = self.bam.header
+        for record_type, records in self.headers.items():
+            print record_type
+            for i, record in enumerate(records):
+                print "\t{},".format(i+1)
+                if type(record) == str:
+                    print "\t\t{}".format(record)
+                elif type(record) == dict:
+                    for field, value in record.items():
+                        print "\t\t{}\t{}".format(field, value)
 
 
 
@@ -65,7 +83,8 @@ def main():
     args = docopt(__doc__)
     print args
     mf = MouseFilter(bamfile=args['-b'], outfile=args['-o'])
-    mf.extract_human_reads()
+    mf.show_headers()
+
 
 
 if __name__ == '__main__':
