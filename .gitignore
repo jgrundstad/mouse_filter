@@ -3,3 +3,4 @@ test_data/
 *.idea
 *.log
 *.fastq
+*.fq.gz
