@@ -1,4 +1,4 @@
-__author__ = 'jgrundst'
+__author__ = 'A. Jason Grundstad'
 
 
 def evaluate_pair(read1=None, read2=None):

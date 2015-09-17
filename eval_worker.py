@@ -1,6 +1,6 @@
 from threading import Thread
 from read_evaluator import evaluate_pair
-__author__ = 'jgrundst'
+__author__ = 'A. Jason Grundstad'
 
 
 class EvaluatorWorker(Thread):

@@ -18,7 +18,7 @@ from bitwise_flags import flags
 from eval_worker import EvaluatorWorker as EW
 from fastq_writer import FastqWriter
 
-__author__ = 'jgrundst'
+__author__ = 'A. Jason Grundstad'
 
 
 class BamParser:

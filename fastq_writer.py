@@ -2,7 +2,7 @@ import gzip
 import logging
 import sys
 
-__author__ = 'jgrundst'
+__author__ = 'A. Jason Grundstad'
 
 
 class FastqWriter:

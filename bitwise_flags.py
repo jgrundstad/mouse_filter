@@ -1,4 +1,4 @@
-__author__ = 'jgrundst'
+__author__ = 'A. Jason Grundstad'
 
 flags = {'read_paired': 1,
          'read_mapped_in_proper_pair': 2,
