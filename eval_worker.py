@@ -22,4 +22,4 @@ class EvaluatorWorker(Thread):
         while True:
             read1, read2 = self.queue.get()
             if evaluate_pair(read1, read2):
-                self.FW.buffer_reads(read1=read1, read2=read2)
+                self.FW.print_reads(read1=read1, read2=read2)

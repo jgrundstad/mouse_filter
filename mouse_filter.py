@@ -24,7 +24,7 @@ __author__ = 'jgrundst'
 class BamParser:
 
     def __init__(self, bamfile=None, outfile=None, mouse_vars=None,
-                 num_threads=4):
+                 num_threads=4, queue_maxsize=256):
         self.handler = None
         self.logger = logging.getLogger(__name__)
         self.setup_logging()
@@ -32,13 +32,18 @@ class BamParser:
         self.load_bam(bamfile)
         self.bamfilename = bamfile
         self.headers = None
-        self.queue = Queue.Queue()
+        self.queue = Queue.Queue(maxsize=queue_maxsize)
         self.FW = FastqWriter(outfile_stub=outfile)
         self.num_threads = num_threads
-
+        init_msg = """Input params -
+        bamfile: {}
+        outfiles: {}
+        mouse_vars: {}
+        queue_maxsize: {}
+        num_threads: {}"""
         self.logger.info(
-            "Input params - \nbamfile: {}\noutfiles: {}\nmouse_vars: {}".format(
-                bamfile, outfile + '_(1/2).fq.gz', mouse_vars
+            init_msg.format(bamfile, outfile + '_(1/2).fq.gz', mouse_vars,
+                            queue_maxsize, num_threads
             )
         )
 
@@ -61,6 +66,13 @@ class BamParser:
             self.logger.info("Exiting")
             sys.exit(1)
 
+    def start_workers(self):
+        for x in range(self.num_threads):
+            worker = EW(FW=self.FW, queue=self.queue)
+            worker.daemon = True
+            self.logger.info("Initiating worker {}".format(x))
+            worker.start()
+
     def extract_reads(self):
         """
         Traverse .bam file for primary alignment pairs, skipping over
@@ -72,10 +84,8 @@ class BamParser:
         self.logger.info("Initializing queue with {} threads".format(
             self.num_threads
         ))
-        for x in range(self.num_threads):
-            worker = EW(FW=self.FW, queue=self.queue)
-            worker.daemon = True
-            worker.start()
+
+        self.start_workers()
 
         pair_count = 0
         # the first read is always the primary alignment
@@ -96,8 +106,7 @@ class BamParser:
                 Don't have the same names.  Quitting...'''
                 raise ValueError(out_message.format(pair_count, read1, read2))
 
-            # decide if we keep or toss!
-            # send to EvaluatorWorker
+            # queue the evaluation job for the workers
             self.queue.put((read1, read2))
 
             # Move on to next pair. Is there another read1?
@@ -114,8 +123,6 @@ class BamParser:
         # put final pair in queue
         self.queue.put((read1, read2))
         self.queue.join()
-        # print out final fastq records s to outfiles
-        self.FW.flush_buffers()
         self.logger.info("Submitted {} sequence pairs to queue".format(
             pair_count))
 

@@ -10,6 +10,7 @@ def evaluate_pair(read1=None, read2=None):
     :return:
     """
     if read1.cigarstring and read2.cigarstring:
+        # perfect alignment - pass over!
         if ((len(read1.cigar) == 1 and read1.cigar[0][0] ==0) and
                 (len(read2.cigar) == 1 and read2.cigar[0][0] == 0)):
             pass
