@@ -6,7 +6,7 @@ Usage:
 
 Options:
     -b BAMFILE           Human .bam alignment file
-    -o OUT_FASTQ_STUB    Human fastq output file stub (e.g. 2015-123_human)
+    -o OUT_FASTQ_STUB    Human fastq output filename stub
     -m MOUSE_VARS        Strain-specific variants
 ```
 
