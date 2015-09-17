@@ -18,7 +18,7 @@ from bitwise_flags import flags
 __author__ = 'jgrundst'
 
 
-class MouseFilter:
+class BamParser:
 
     def __init__(self, bamfile=None, outfile=None, mouse_vars=None):
         self.handler = None
@@ -26,14 +26,7 @@ class MouseFilter:
         self.setup_logging()
         self.bam = None
         self.load_bam(bamfile)
-        self.fq1 = None
-        self.fq2 = None
-        self.set_outfiles(outfile)
         self.headers = None
-        self.read1_buffer = None
-        self.read2_buffer = None
-        self.buffer_read_count = None
-        self.buffer_size = 10
 
         self.logger.info(
             "Input params - \nbamfile: {}\noutfiles: {}\nmouse_vars: {}".format(
@@ -60,20 +53,6 @@ class MouseFilter:
             self.logger.info("Exiting")
             sys.exit(1)
 
-    def set_outfiles(self, outfile):
-        try:
-            self.fq1 = gzip.open(outfile + '_1.fq.gz', 'w')
-            self.fq2 = gzip.open(outfile + '_2.fq.gz', 'w')
-
-        except IOError:
-            self.logger.error(
-                "Unable to open outfile for writing: {}".format(
-                    outfile
-                )
-            )
-            self.logger.info("Exiting")
-            sys.exit(1)
-
     def show_headers(self):
         self.headers = self.bam.header
         for record_type, records in self.headers.items():
@@ -86,10 +65,6 @@ class MouseFilter:
                     for field, value in record.items():
                         print "\t\t{}\t{}".format(field, value)
 
-    def buffer_reads(self, read1, read2):
-        self.read1_buffer += read_to_fastq(read1)
-        self.read2_buffer += read_to_fastq(read2)
-        self.buffer_read_count += 1
 
     def evaluate_pair(self, read1, read2):
         if read1.cigarstring and read2.cigarstring:
@@ -101,13 +76,6 @@ class MouseFilter:
                 self.buffer_reads(read1, read2)
         else:
             self.buffer_reads(read1, read2)
-
-    def print_fq_buffers(self):
-        self.fq1.write(self.read1_buffer)
-        self.fq2.write(self.read2_buffer)
-        self.read1_buffer = ''
-        self.read2_buffer = ''
-        self.buffer_read_count = 0
 
     def extract_human(self):
         """
@@ -176,15 +144,11 @@ def bitwise_flag_check(read, flag_string):
         return False
 
 
-def read_to_fastq(read):
-    return "@{}\n{}\n+\n{}\n".format(read.query_name, read.seq, read.qual)
-
-
 def main():
     args = docopt(__doc__)
     print args
-    mf = MouseFilter(bamfile=args['-b'], outfile=args['-o'])
-    mf.extract_human()
+    bp = BamParser(bamfile=args['-b'], outfile=args['-o'])
+    bp.extract_human()
 
 if __name__ == '__main__':
     main()
