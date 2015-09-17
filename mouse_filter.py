@@ -5,19 +5,18 @@ Usage:
     mouse_filter.py -b BAMFILE -o OUT_FASTQ_STUB [-m MOUSE_VARS]
 
 Options:
-    -b BAMFILE           Human .bam alignemnt file
+    -b BAMFILE           Human .bam alignment file
     -o OUT_FASTQ_STUB    Human fastq output file stub (e.g. 2015-123_human)
     -m MOUSE_VARS        Strain-specific variants
 """
-import gzip
-import re
-
 __author__ = 'jgrundst'
 import pysam
 from docopt import docopt
 import logging
 import sys
+import gzip
 from bitwise_flags import flags
+
 
 class MouseFilter:
 
@@ -87,24 +86,16 @@ class MouseFilter:
                     for field, value in record.items():
                         print "\t\t{}\t{}".format(field, value)
 
-    def bitwise_flag_check(self, read, flag_string):
-        if read.flag & flags[flag_string] == flags[flag_string]:
-            return True
-        else:
-            return False
-
     def buffer_reads(self, read1, read2):
-        self.read1_buffer += self.read_to_fastq(read1)
-        self.read2_buffer += self.read_to_fastq(read2)
+        self.read1_buffer += read_to_fastq(read1)
+        self.read2_buffer += read_to_fastq(read2)
         self.buffer_read_count += 1
 
     def evaluate_pair(self, read1, read2):
         if read1.cigarstring and read2.cigarstring:
-            # if (re.match('\d*M$', read1.cigarstring) and
-            #         (re.match('\d*M$', read2.cigarstring))):
             if ((len(read1.cigar) == 1 and read1.cigar[0][0] == 0) and
                     (len(read2.cigar) == 1 and
-                             read2.cigar[0][0] == 0)):
+                        read2.cigar[0][0] == 0)):
                 pass
             else:
                 self.buffer_reads(read1, read2)
@@ -112,9 +103,6 @@ class MouseFilter:
             self.buffer_reads(read1, read2)
 
     def print_fq_buffers(self):
-        # self.logger.info("Dumping buffer: {} seq pairs".format(
-        #     self.buffer_read_count
-        # ))
         self.fq1.write(self.read1_buffer)
         self.fq2.write(self.read2_buffer)
         self.read1_buffer = ''
@@ -139,16 +127,16 @@ class MouseFilter:
 
             read2 = self.bam.next()
             # make sure we're looking at primary alignment of read2
-            while ((self.bitwise_flag_check(read2, 'second_in_pair') is False) and
-                   (self.bitwise_flag_check(read2, 'not_primary_alignment')) is True):
+            while ((bitwise_flag_check(read2, 'second_in_pair') is False) and
+                   (bitwise_flag_check(read2, 'not_primary_alignment')) is True):
                 read2 = self.bam.next()
             pair_count += 1
             if read1.query_name != read2.query_name:
-                outmsg = '''Pair #{}
+                out_message = '''Pair #{}
                 Read1 {}
                 Read2 {}
                 Don't have the same names.  Quitting...'''
-                raise ValueError(outmsg.format(pair_count, read1, read2))
+                raise ValueError(out_message.format(pair_count, read1, read2))
 
             # decide if we keep or toss!
             self.evaluate_pair(read1, read2)
@@ -160,8 +148,8 @@ class MouseFilter:
             # Move on to next pair. Is there another read1?
             try:
                 read1 = self.bam.next()
-                while ((self.bitwise_flag_check(read1, 'second_in_pair') is True) and
-                       (self.bitwise_flag_check(read1, 'not_primary_alignment')) is True):
+                while ((bitwise_flag_check(read1, 'second_in_pair') is True) and
+                       (bitwise_flag_check(read1, 'not_primary_alignment')) is True):
                     read1 = self.bam.next()
             except StopIteration:
                 self.logger.info('No more reads, end of file')
@@ -180,16 +168,23 @@ class MouseFilter:
                 c += 1
         print "{} perfectly aligned reads".format(c)
 
-    def read_to_fastq(self, read):
-        return "@{}\n{}\n+\n{}\n".format(read.query_name, read.seq, read.qual)
+
+def bitwise_flag_check(read, flag_string):
+    if read.flag & flags[flag_string] == flags[flag_string]:
+        return True
+    else:
+        return False
+
+
+def read_to_fastq(read):
+    return "@{}\n{}\n+\n{}\n".format(read.query_name, read.seq, read.qual)
+
 
 def main():
     args = docopt(__doc__)
     print args
     mf = MouseFilter(bamfile=args['-b'], outfile=args['-o'])
     mf.extract_human()
-
-
 
 if __name__ == '__main__':
     main()
