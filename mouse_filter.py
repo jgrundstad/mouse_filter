@@ -9,31 +9,32 @@ Options:
     -o OUT_FASTQ_STUB    Human fastq output file stub (e.g. 2015-123_human)
     -m MOUSE_VARS        Strain-specific variants
 """
+import Queue
 import pysam
 from docopt import docopt
 import logging
 import sys
-import gzip
 from bitwise_flags import flags
+from eval_worker import EvaluatorWorker as EW
+from fastq_writer import FastqWriter
+
 __author__ = 'jgrundst'
 
 
-class MouseFilter:
+class BamParser:
 
-    def __init__(self, bamfile=None, outfile=None, mouse_vars=None):
+    def __init__(self, bamfile=None, outfile=None, mouse_vars=None,
+                 num_threads=4):
         self.handler = None
         self.logger = logging.getLogger(__name__)
         self.setup_logging()
         self.bam = None
         self.load_bam(bamfile)
-        self.fq1 = None
-        self.fq2 = None
-        self.set_outfiles(outfile)
+        self.bamfilename = bamfile
         self.headers = None
-        self.read1_buffer = None
-        self.read2_buffer = None
-        self.buffer_read_count = None
-        self.buffer_size = 10
+        self.queue = Queue.Queue()
+        self.FW = FastqWriter(outfile_stub=outfile)
+        self.num_threads = num_threads
 
         self.logger.info(
             "Input params - \nbamfile: {}\noutfiles: {}\nmouse_vars: {}".format(
@@ -60,62 +61,7 @@ class MouseFilter:
             self.logger.info("Exiting")
             sys.exit(1)
 
-    def set_outfiles(self, outfile):
-        try:
-            self.fq1 = gzip.open(outfile + '_1.fq.gz', 'w')
-            self.fq2 = gzip.open(outfile + '_2.fq.gz', 'w')
-
-        except IOError:
-            self.logger.error(
-                "Unable to open outfile for writing: {}".format(
-                    outfile
-                )
-            )
-            self.logger.info("Exiting")
-            sys.exit(1)
-
-    def show_headers(self):
-        self.headers = self.bam.header
-        for record_type, records in self.headers.items():
-            print record_type
-            for i, record in enumerate(records):
-                print "\t{},".format(i+1)
-                if type(record) == str:
-                    print "\t\t{}".format(record)
-                elif type(record) == dict:
-                    for field, value in record.items():
-                        print "\t\t{}\t{}".format(field, value)
-
-    def buffer_reads(self, read1, read2):
-        self.read1_buffer += read_to_fastq(read1)
-        self.read2_buffer += read_to_fastq(read2)
-        self.buffer_read_count += 1
-
-    def evaluate_pair(self, read1, read2):
-        if read1.cigarstring and read2.cigarstring:
-            if ((len(read1.cigar) == 1 and read1.cigar[0][0] == 0) and
-                    (len(read2.cigar) == 1 and
-                        read2.cigar[0][0] == 0)):
-                pass
-            else:
-                #self.print_readpair(read1, read2)
-                self.buffer_reads(read1, read2)
-        else:
-            self.buffer_reads(read1, read2)
-            #self.print_readpair(read1, read2)
-
-    def print_fq_buffers(self):
-        self.fq1.write(self.read1_buffer)
-        self.fq2.write(self.read2_buffer)
-        self.read1_buffer = ''
-        self.read2_buffer = ''
-        self.buffer_read_count = 0
-
-    def print_readpair(self, read1, read2):
-        self.fq1.write(read_to_fastq(read1))
-        self.fq2.write(read_to_fastq(read2))
-
-    def extract_human(self):
+    def extract_reads(self):
         """
         Traverse .bam file for primary alignment pairs, skipping over
         secondary alignments.  pass primary alignments to evaluator and
@@ -123,12 +69,18 @@ class MouseFilter:
         :return:
         """
         self.logger.info("Extracting human reads to outfiles...")
-        self.read1_buffer = ''
-        self.read2_buffer = ''
-        self.buffer_read_count = 0
+        self.logger.info("Initializing queue with {} threads".format(
+            self.num_threads
+        ))
+        for x in range(self.num_threads):
+            worker = EW(FW=self.FW, queue=self.queue)
+            worker.daemon = True
+            worker.start()
+
         pair_count = 0
         # the first read is always the primary alignment
         read1 = self.bam.next()
+        read2 = None
         while read1:
 
             read2 = self.bam.next()
@@ -145,11 +97,8 @@ class MouseFilter:
                 raise ValueError(out_message.format(pair_count, read1, read2))
 
             # decide if we keep or toss!
-            self.evaluate_pair(read1, read2)
-
-            # if we have self.buffer_size reads in the buffer, output to gzip
-            if self.buffer_read_count == self.buffer_size:
-                self.print_fq_buffers()
+            # send to EvaluatorWorker
+            self.queue.put((read1, read2))
 
             # Move on to next pair. Is there another read1?
             try:
@@ -158,15 +107,17 @@ class MouseFilter:
                        (bitwise_flag_check(read1, 'not_primary_alignment')) is True):
                     read1 = self.bam.next()
             except StopIteration:
-                self.logger.info('No more reads, end of file')
+                self.logger.info('No more alignments, end of file{}'.format(
+                    self.bamfilename
+                ))
                 read1 = None
-        self.fq1.close()
-        self.fq2.close()
-        self.logger.info("Counted {} sequence pairs".format(pair_count))
-        self.logger.info("Final buffer dump of {} pairs".format(
-            self.buffer_read_count))
-        self.print_fq_buffers()
-        #self.evaluate_pair(read1, read2)
+        # put final pair in queue
+        self.queue.put((read1, read2))
+        self.queue.join()
+        # print out final fastq records s to outfiles
+        self.FW.flush_buffers()
+        self.logger.info("Submitted {} sequence pairs to queue".format(
+            pair_count))
 
     def count_perfect_matches(self):
         c = 0
@@ -190,8 +141,8 @@ def read_to_fastq(read):
 def main():
     args = docopt(__doc__)
     print args
-    mf = MouseFilter(bamfile=args['-b'], outfile=args['-o'])
-    mf.extract_human()
+    parser = BamParser(bamfile=args['-b'], outfile=args['-o'])
+    parser.extract_reads()
 
 if __name__ == '__main__':
     main()

@@ -51,6 +51,11 @@ class FastqWriter:
             self.fq2_buffer = ''
         self.buffer_read_count = 0
 
+    def flush_buffers(self):
+        self.print_fq_buffers()
+        self.fq1.close()
+        self.fq2.close()
+
 
 def read_to_fastq(read):
     return "@{}\n{}\n+\n{}\n".format(read.query_name, read.seq, read.qual)
