@@ -9,13 +9,13 @@ Options:
     -o OUT_FASTQ_STUB    Human fastq output file stub (e.g. 2015-123_human)
     -m MOUSE_VARS        Strain-specific variants
 """
-__author__ = 'jgrundst'
 import pysam
 from docopt import docopt
 import logging
 import sys
 import gzip
 from bitwise_flags import flags
+__author__ = 'jgrundst'
 
 
 class MouseFilter:
