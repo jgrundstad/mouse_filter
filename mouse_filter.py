@@ -98,9 +98,11 @@ class MouseFilter:
                         read2.cigar[0][0] == 0)):
                 pass
             else:
+                #self.print_readpair(read1, read2)
                 self.buffer_reads(read1, read2)
         else:
             self.buffer_reads(read1, read2)
+            #self.print_readpair(read1, read2)
 
     def print_fq_buffers(self):
         self.fq1.write(self.read1_buffer)
@@ -108,6 +110,10 @@ class MouseFilter:
         self.read1_buffer = ''
         self.read2_buffer = ''
         self.buffer_read_count = 0
+
+    def print_readpair(self, read1, read2):
+        self.fq1.write(read_to_fastq(read1))
+        self.fq2.write(read_to_fastq(read2))
 
     def extract_human(self):
         """
@@ -160,6 +166,7 @@ class MouseFilter:
         self.logger.info("Final buffer dump of {} pairs".format(
             self.buffer_read_count))
         self.print_fq_buffers()
+        #self.evaluate_pair(read1, read2)
 
     def count_perfect_matches(self):
         c = 0
