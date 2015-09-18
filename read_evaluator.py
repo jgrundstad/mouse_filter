@@ -1,20 +1,21 @@
 __author__ = 'A. Jason Grundstad'
 
 
-def evaluate_pair(read1=None, read2=None):
+def evaluate_pair(read1, read2, fastq_queue):
     """
-    return True if the reads are to be kept, False if they are to be
+    pop reads into queue if the reads are to be kept, pass if they are to be
     ignored.
     :param read1:
     :param read2:
     :return:
     """
+    print "{}".format(read1.query_name)
     if read1.cigarstring and read2.cigarstring:
         # perfect alignment - pass over!
         if ((len(read1.cigar) == 1 and read1.cigar[0][0] ==0) and
                 (len(read2.cigar) == 1 and read2.cigar[0][0] == 0)):
             pass
         else:
-            return True
+            fastq_queue.put((read1, read2))
     else:
-        return True
+        fastq_queue.put((read1, read2))

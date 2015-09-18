@@ -1,11 +1,12 @@
 from threading import Thread
+from fastq_writer import FastqWriter
 from read_evaluator import evaluate_pair
 __author__ = 'A. Jason Grundstad'
 
 
 class EvaluatorWorker(Thread):
 
-    def __init__(self, paired=True, queue=None, FW=None):
+    def __init__(self, paired=True, queue=None, number=None, outfile=None):
         """
         Threaded worker class to perform read evaluations
         assumes paired end.
@@ -16,7 +17,8 @@ class EvaluatorWorker(Thread):
         """
         Thread.__init__(self)
         self.queue = queue
-        self.FW = FW
+        outfilename = "{}-{}".format(number, outfile)
+        self.FW = FastqWriter(outfile_stub=outfilename)
 
     def run(self):
         while True:

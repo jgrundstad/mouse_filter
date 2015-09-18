@@ -31,5 +31,11 @@ class FastqWriter:
         self.fq1.write(read_to_fastq(read1))
         self.fq2.write(read_to_fastq(read2))
 
+    def print_reads_from_queue(self, queue=None):
+        pair = queue.get()
+        self.fq1.write(read_to_fastq(pair[0]))
+        self.fq2.write(read_to_fastq(pair[1]))
+
+
 def read_to_fastq(read):
     return "@{}\n{}\n+\n{}\n".format(read.query_name, read.seq, read.qual)
