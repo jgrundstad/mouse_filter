@@ -9,6 +9,8 @@ def evaluate_pair(read1, read2, fastq_queue):
     :param read2:
     :return:
     """
+    fastq_queue.put(('strang1', 'strang2'))
+    return True
     print "{}".format(read1.query_name)
     if read1.cigarstring and read2.cigarstring:
         # perfect alignment - pass over!

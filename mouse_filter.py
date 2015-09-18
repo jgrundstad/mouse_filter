@@ -129,15 +129,12 @@ class BamParser:
             pair_count))
 
     def fastq_queue_listener(self, queue):
-        s = queue.qsize()
-        self.logger.info("BOING: qsize:".format(int(s)))
-        out = open('testing.out', 'w')
         while True:
             print "HIHI"
             pair = queue.get()
-            print "tried to get"
-            self.logger.info("print {} to out".format(pair))
-            out.write(pair)
+            if pair == 'kill':
+                break
+            self.FW.print_reads(read1=pair[0], read2=pair[1])
             # self.logger.info("fastq_queue_listener: {}".format(pair[0].query_name))
             # self.FW.print_reads(pair[0], pair[1])
 
@@ -154,7 +151,7 @@ class BamParser:
         #     else:
         #         print "{} - {}".format(pair[0].query_name, pair[1].query_name)
         manager = multiprocessing.Manager()
-        fastq_queue = Queue.Queue(maxsize=self.fastq_queue_size)
+        fastq_queue = manager.Queue(maxsize=self.fastq_queue_size)
         fastq_writer_proc = multiprocessing.Process(
             target=self.fastq_queue_listener,
             args=(fastq_queue,))
@@ -162,15 +159,16 @@ class BamParser:
 
         pool = multiprocessing.Pool(self.num_threads)
 
-        print "Popping 'hi' into the queue"
-        pool.apply_async(f, args=(fastq_queue, 'hi'))
-        # for i, pair in enumerate(ExtractPairs(self.bam)):
-        #     if i % 100 == 0:
-        #         self.logger.info("extracted {} pairs".format(i))
-        #     pool.apply_async(evaluate_pair, (pair[0], pair[1],
-        #                                      fastq_queue))
+        # print "Popping 'hi' into the queue"
+        # pool.apply_async(f, args=(fastq_queue, 'hi'))
+        for i, pair in enumerate(ExtractPairs(self.bam)):
+            if i % 100 == 0:
+                self.logger.info("extracted {} pairs".format(i))
+            pool.apply_async(evaluate_pair, args=(pair[0], pair[1],
+                                                  fastq_queue))
         pool.close()
         pool.join()
+        fastq_queue.put('kill')
         fastq_writer_proc.join()
 
     def count_perfect_matches(self):
@@ -191,7 +189,7 @@ def bitwise_flag_check(read, flag_string):
 def read_to_fastq(read):
     return "@{}\n{}\n+\n{}\n".format(read.query_name, read.seq, read.qual)
 
-def f(self, q, x):
+def f(q, x):
     print "putting x: {}".format(x)
     q.put(x)
 
