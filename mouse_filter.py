@@ -9,7 +9,7 @@ Options:
     -o OUT_FASTQ_STUB    Human fastq output file stub (e.g. 2015-123_human)
     -m MOUSE_VARS        Strain-specific variants
 """
-import Queue
+import gzip
 import multiprocessing
 import pysam
 from docopt import docopt
@@ -17,10 +17,6 @@ import logging
 import sys
 from bitwise_flags import flags
 from extract_pairs import ExtractPairs
-from fastq_writer import FastqWriter
-from read_evaluator import evaluate_pair
-# from eval_worker import EvaluatorWorker as EW
-
 __author__ = 'A. Jason Grundstad'
 
 
@@ -34,10 +30,9 @@ class BamParser:
         self.load_bam(bamfile)
         self.bamfilename = bamfile
         self.headers = None
-        self.queue = Queue.Queue(maxsize=queue_maxsize)
-        self.fastq_queue_size = 256
+        self.fastq_queue_size = 100
         self.num_threads = num_threads
-        self.FW = FastqWriter(outfile_stub=outfile)
+        self.outfile_stub = outfile
         init_msg = """Input params -
         bamfile: {}
         outfiles: {}
@@ -69,102 +64,32 @@ class BamParser:
             self.logger.info("Exiting")
             sys.exit(1)
 
-    # def start_workers(self):
-    #     for x in range(self.num_threads):
-    #         worker = EW(queue=self.queue, number=x,
-    #                     outfile=self.outfile)
-    #         worker.daemon = True
-    #         self.logger.info("Initiating worker {}".format(x))
-    #         worker.start()
-
-    def worker(self):
-        read1, read2 = self.queue.get()
-        evaluate_pair(read1=read1, read2=read2)
-
-    def extract_reads(self):
-        """
-        Generator -
-        Traverse .bam file for primary alignment pairs, skipping over
-        secondary alignments.  pass primary alignments to evaluator and
-        fill the fastq buffers.  dump to fq.gz files
-        :return:
-        """
-        self.logger.info("Extracting primary-alignment read pairs.")
-
-        pair_count = 0
-        # the first read is always the primary alignment
-        read1 = self.bam.next()
-        read2 = None
-        while read1:
-
-            read2 = self.bam.next()
-            # make sure we're looking at primary alignment of read2
-            while ((bitwise_flag_check(read2, 'second_in_pair') is False) and
-                           (bitwise_flag_check(read2, 'not_primary_alignment')) is True):
-                read2 = self.bam.next()
-            pair_count += 1
-            if read1.query_name != read2.query_name:
-                out_message = '''Pair #{}
-                Read1 {}
-                Read2 {}
-                Don't have the same names.  Quitting...'''
-                raise ValueError(out_message.format(pair_count, read1, read2))
-
-            # queue the evaluation job for the workers
-            self.queue.put((read1, read2))
-            yield (read1, read2)
-
-            # Move on to next pair. Is there another read1?
-            try:
-                read1 = self.bam.next()
-                while ((bitwise_flag_check(read1, 'second_in_pair') is True) and
-                               (bitwise_flag_check(read1, 'not_primary_alignment')) is True):
-                    read1 = self.bam.next()
-            except StopIteration:
-                self.logger.info('No more alignments, end of file{}'.format(
-                    self.bamfilename
-                ))
-                read1 = None
-        self.logger.info("Submitted {} sequence pairs to queue".format(
-            pair_count))
-
-    def fastq_queue_listener(self, queue):
-        while True:
-            print "HIHI"
-            pair = queue.get()
-            if pair == 'kill':
-                break
-            self.FW.print_reads(read1=pair[0], read2=pair[1])
-            # self.logger.info("fastq_queue_listener: {}".format(pair[0].query_name))
-            # self.FW.print_reads(pair[0], pair[1])
-
     def evaluate_reads(self):
         """
         Start fastq writing queue to assure paired reads are output properly
         Start the process pool over the readpair generator
         :return:
         """
-
-        # for i,pair in enumerate(ExtractPairs(self.bam)):
-        #     if i > 10:
-        #         break
-        #     else:
-        #         print "{} - {}".format(pair[0].query_name, pair[1].query_name)
         manager = multiprocessing.Manager()
         fastq_queue = manager.Queue(maxsize=self.fastq_queue_size)
         fastq_writer_proc = multiprocessing.Process(
-            target=self.fastq_queue_listener,
-            args=(fastq_queue,))
+            target=print_to_gzip,
+            args=(fastq_queue, self.outfile_stub))
         fastq_writer_proc.start()
 
         pool = multiprocessing.Pool(self.num_threads)
 
-        # print "Popping 'hi' into the queue"
-        # pool.apply_async(f, args=(fastq_queue, 'hi'))
+        # pair = ExtractPairs(self.bam).next()
+        # pool.apply_async(evaluate_pair, args=(read_to_dict(pair[0]),
+        #                                       read_to_dict(pair[1]),
+        #                                       fastq_queue))
+
         for i, pair in enumerate(ExtractPairs(self.bam)):
-            if i % 100 == 0:
-                self.logger.info("extracted {} pairs".format(i))
-            pool.apply_async(evaluate_pair, args=(pair[0], pair[1],
+            if i % 1000000 == 0 and i > 0:
+                # print pair
+                self.logger.info("extracted {} pairs".format(1000000))
+            pool.apply_async(evaluate_pair, args=(read_to_dict(pair[0]),
+                                                  read_to_dict(pair[1]),
                                                   fastq_queue))
         pool.close()
         pool.join()
@@ -185,19 +110,57 @@ def bitwise_flag_check(read, flag_string):
     else:
         return False
 
+def read_to_dict(read):
+    return {'query_name': read.query_name, 'seq': read.seq, 'qual': read.qual,
+            'cigar': read.cigar, 'cigarstring': read.cigarstring,
+            'flag': read.flag}
 
 def read_to_fastq(read):
     return "@{}\n{}\n+\n{}\n".format(read.query_name, read.seq, read.qual)
 
-def f(q, x):
-    print "putting x: {}".format(x)
-    q.put(x)
+
+def evaluate_pair(read1_dict, read2_dict, fastq_queue):
+    """
+    pop reads into queue if the reads are to be kept, pass if they are to be
+    ignored.
+    :param read1:
+    :param read2:
+    :return:
+    """
+    # print "putting dicts into queue: {}".format(read1_dict)
+    # fastq_queue.put((read1_dict, read2_dict))
+    if read1_dict['cigarstring'] and read2_dict['cigarstring']:
+        # perfect alignment - pass over!
+        if ((len(read1_dict['cigar']) == 1 and read1_dict['cigar'][0][0] ==0) and
+                (len(read2_dict['cigar']) == 1 and read2_dict['cigar'][0][0] == 0)):
+            pass
+        else:
+            fastq_queue.put((read1_dict, read2_dict))
+    else:
+        fastq_queue.put((read1_dict, read2_dict))
+
+def read_to_fastq(read):
+    return "@{}\n{}\n+\n{}\n".format(read['query_name'], read['seq'],
+                                     read['qual'])
+
+def print_to_gzip(queue, outfile_stub):
+    fq1 = gzip.open(outfile_stub + '_1.fq.gz', 'w')
+    fq2 = gzip.open(outfile_stub + '_2.fq.gz', 'w')
+    while True:
+        pair = queue.get()
+        if pair == 'kill':
+            print "returning 'kill'"
+            break
+        else:
+            fq1.write(read_to_fastq(pair[0]))
+            fq2.write(read_to_fastq(pair[1]))
+
 
 def main():
     args = docopt(__doc__)
     print args
     parser = BamParser(bamfile=args['-b'], outfile=args['-o'])
-    parser.extract_reads()
+    parser.evaluate_reads()
 
 
 if __name__ == '__main__':
