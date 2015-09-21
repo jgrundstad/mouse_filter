@@ -9,13 +9,12 @@ Options:
     -o OUT_FASTQ_STUB    Human fastq output file stub (e.g. 2015-123_human)
     -m MOUSE_VARS        Strain-specific variants
 """
-import Queue
+from datetime import datetime
 import pysam
 from docopt import docopt
 import logging
 import sys
 from bitwise_flags import flags
-from eval_worker import EvaluatorWorker as EW
 from fastq_writer import FastqWriter
 
 __author__ = 'A. Jason Grundstad'
@@ -32,7 +31,6 @@ class BamParser:
         self.load_bam(bamfile)
         self.bamfilename = bamfile
         self.headers = None
-        self.queue = Queue.Queue(maxsize=queue_maxsize)
         self.FW = FastqWriter(outfile_stub=outfile)
         self.num_threads = num_threads
         init_msg = """Input params -
@@ -44,7 +42,7 @@ class BamParser:
         self.logger.info(
             init_msg.format(bamfile, outfile + '_(1/2).fq.gz', mouse_vars,
                             queue_maxsize, num_threads
-            )
+                            )
         )
 
     def setup_logging(self):
@@ -66,13 +64,6 @@ class BamParser:
             self.logger.info("Exiting")
             sys.exit(1)
 
-    def start_workers(self):
-        for x in range(self.num_threads):
-            worker = EW(FW=self.FW, queue=self.queue)
-            worker.daemon = True
-            self.logger.info("Initiating worker {}".format(x))
-            worker.start()
-
     def extract_reads(self):
         """
         Traverse .bam file for primary alignment pairs, skipping over
@@ -81,22 +72,20 @@ class BamParser:
         :return:
         """
         self.logger.info("Extracting human reads to outfiles...")
-        self.logger.info("Initializing queue with {} threads".format(
-            self.num_threads
-        ))
-
-        self.start_workers()
 
         pair_count = 0
+        keep_count = 0
         # the first read is always the primary alignment
         read1 = self.bam.next()
         read2 = None
+
+        t1 = datetime.datetime.now()
         while read1:
 
             read2 = self.bam.next()
             # make sure we're looking at primary alignment of read2
-            while ((bitwise_flag_check(read2, 'second_in_pair') is False) and
-                   (bitwise_flag_check(read2, 'not_primary_alignment')) is True):
+            while ((bitwise_check(read2, 'second_in_pair') is False) and
+                   (bitwise_check(read2, 'not_primary_alignment')) is True):
                 read2 = self.bam.next()
             pair_count += 1
             if read1.query_name != read2.query_name:
@@ -106,25 +95,28 @@ class BamParser:
                 Don't have the same names.  Quitting...'''
                 raise ValueError(out_message.format(pair_count, read1, read2))
 
-            # queue the evaluation job for the workers
-            self.queue.put((read1, read2))
+            # eval the pair
+            if evaluate_pair(read1=read1, read2=read2):
+                keep_count += 1
+                self.FW.print_reads(read1=read1, read2=read2)
 
             # Move on to next pair. Is there another read1?
             try:
                 read1 = self.bam.next()
-                while ((bitwise_flag_check(read1, 'second_in_pair') is True) and
-                       (bitwise_flag_check(read1, 'not_primary_alignment')) is True):
+                while ((bitwise_check(read1, 'second_in_pair') is True)
+                       and (bitwise_check(read1, 'not_primary_alignment')) is True):
                     read1 = self.bam.next()
             except StopIteration:
                 self.logger.info('No more alignments, end of file{}'.format(
                     self.bamfilename
                 ))
                 read1 = None
-        # put final pair in queue
-        self.queue.put((read1, read2))
-        self.queue.join()
-        self.logger.info("Submitted {} sequence pairs to queue".format(
-            pair_count))
+        t2 = datetime.datetime.now()
+        fmt = '%H:%M:%S'
+        time_diff = datetime.strptime(t1, fmt) - datetime.strptime(t2, fmt)
+        self.logger.info('Kept {} pairs out of {} in '.format(keep_count,
+                                                              pair_count,
+                                                              time_diff))
 
     def count_perfect_matches(self):
         c = 0
@@ -134,20 +126,36 @@ class BamParser:
         print "{} perfectly aligned reads".format(c)
 
 
-def bitwise_flag_check(read, flag_string):
+def bitwise_check(read, flag_string):
     if read.flag & flags[flag_string] == flags[flag_string]:
         return True
     else:
         return False
 
-
 def read_to_fastq(read):
     return "@{}\n{}\n+\n{}\n".format(read.query_name, read.seq, read.qual)
+
+def evaluate_pair(read1=None, read2=None):
+    """
+    return True if the reads are to be kept, False if they are to be
+    ignored.
+    :param read1:
+    :param read2:
+    :return:
+    """
+    if read1.cigarstring and read2.cigarstring:
+        # perfect alignment - pass over!
+        if ((len(read1.cigar) == 1 and read1.cigar[0][0] ==0) and
+                (len(read2.cigar) == 1 and read2.cigar[0][0] == 0)):
+            pass
+        else:
+            return True
+    else:
+        return True
 
 
 def main():
     args = docopt(__doc__)
-    print args
     parser = BamParser(bamfile=args['-b'], outfile=args['-o'])
     parser.extract_reads()
 
