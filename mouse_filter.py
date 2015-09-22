@@ -22,28 +22,21 @@ __author__ = 'A. Jason Grundstad'
 
 class BamParser:
 
-    def __init__(self, bamfile=None, outfile=None, mouse_vars=None,
-                 num_threads=4, queue_maxsize=256):
+    def __init__(self, bamfile=None, outfile=None, mouse_vars=None):
         self.handler = None
         self.logger = logging.getLogger(__name__)
         self.setup_logging()
         self.bam = None
         self.load_bam(bamfile)
         self.bamfilename = bamfile
-        self.headers = None
         self.FW = FastqWriter(outfile_stub=outfile)
-        self.num_threads = num_threads
         init_msg = """Input params -
         bamfile: {}
         outfiles: {}
         mouse_vars: {}
-        queue_maxsize: {}
-        num_threads: {}"""
+        """
         self.logger.info(
-            init_msg.format(bamfile, outfile + '_(1/2).fq.gz', mouse_vars,
-                            queue_maxsize, num_threads
-                            )
-        )
+            init_msg.format(bamfile, outfile + '_(1/2).fq.gz', mouse_vars))
 
     def setup_logging(self):
         if not self.logger.handlers:
@@ -79,7 +72,7 @@ class BamParser:
         read1 = self.bam.next()
         read2 = None
 
-        t1 = datetime.datetime.now()
+        t1 = datetime.now()
         while read1:
 
             read2 = self.bam.next()
@@ -111,12 +104,11 @@ class BamParser:
                     self.bamfilename
                 ))
                 read1 = None
-        t2 = datetime.datetime.now()
-        fmt = '%H:%M:%S'
-        time_diff = datetime.strptime(t1, fmt) - datetime.strptime(t2, fmt)
-        self.logger.info('Kept {} pairs out of {} in '.format(keep_count,
-                                                              pair_count,
-                                                              time_diff))
+        t2 = datetime.now()
+        td = t2 - t1
+        self.logger.info('Kept {} pairs out of {} in {}'.format(keep_count,
+                                                                pair_count,
+                                                                str(td)))
 
     def count_perfect_matches(self):
         c = 0
