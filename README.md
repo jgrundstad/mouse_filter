@@ -1,13 +1,16 @@
 ```bash
-Remove all mouse-derived reads from a Human PDX .bam
+usage: read_bam.py [-h] [-b BAM] -o OUTPUT [-c COMPRESSION]
 
-Usage:
-    mouse_filter.py -b BAMFILE -o OUT_FASTQ_STUB [-m MOUSE_VARS]
+Detect and isolate human reads from a bam file generated from human(SEQ)
+aligned to mouse(REF). Accepts either: a file, or sam data piped from stdin.
+NOTE: when reading from stdin, you must provide the SAM headers "@" via
+samtools' -h flag.
 
-Options:
-    -b BAMFILE           Human .bam alignment file
-    -o OUT_FASTQ_STUB    Human fastq output filename stub
-    -m MOUSE_VARS        Strain-specific variants
+optional arguments:
+  -h, --help      show this help message and exit
+  -b BAM          Input .bam (unsorted) [stdin]
+  -o OUTPUT       Output stub e.g. Human.fastq
+  -c COMPRESSION  Optional fq.gz compression rate [default: 4]
 ```
 
 Note:  -m flag not implemented yet.
