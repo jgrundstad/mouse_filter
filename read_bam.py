@@ -2,8 +2,6 @@ import argparse
 import gzip
 import datetime
 import pysam
-import sys
-
 __author__ = 'A. Jason Grundstad'
 
 keep_count = 0
@@ -21,7 +19,7 @@ def read_bam(bamfile):
             total_reads += 1
         read2 = bam.next()
         total_reads += 1
-        while read2.is_secondary and not read2.is_read2:  # while not primary
+        while read2.is_secondary and not read2.is_read2:
             read2 = bam.next()
             total_reads += 1
         if read1.query_name is read2.query_name:
@@ -62,8 +60,6 @@ def main():
                         type=int,
                         help='Optional fq.gz compression rate [default: 4]')
     args = parser.parse_args()
-    print args
-    input_file = args.bam
 
     fq1 = gzip.open(args.output + '_1.fq.gz', 'w',
                     compresslevel=args.compression)
@@ -73,7 +69,7 @@ def main():
     pair_count = None
     t_start = datetime.datetime.now()
 
-    for pair_count, pair in enumerate(read_bam(input_file), start=1):
+    for pair_count, pair in enumerate(read_bam(args.bam), start=1):
         # do we have alignments
         if not (pair[0].is_unmapped and pair[1].is_unmapped):
             # are both alignments perfect, pass it over
