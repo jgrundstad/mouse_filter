@@ -2,6 +2,8 @@ import argparse
 import gzip
 import datetime
 import pysam
+import sys
+
 __author__ = 'A. Jason Grundstad'
 
 keep_count = 0
@@ -22,7 +24,7 @@ def read_bam(bamfile):
         while read2.is_secondary and not read2.is_read2:
             read2 = bam.next()
             total_reads += 1
-        if read1.query_name is read2.query_name:
+        if read1.query_name != read2.query_name:
             print "{}\n{}".format(read1.query_name,
                                   read2.query_name)
             raise ValueError
@@ -34,6 +36,11 @@ def read_bam(bamfile):
             read1 = bam.next()
             total_reads += 1
 
+def print_fastq_to_pipes(read1=None, read2=None):
+    sys.stdout.write("@{}\n{}\n+\n{}\n".format(read1.query_name, read1.seq,
+                                               read1.qual))
+    sys.stderr.write("@{}\n{}\n+\n{}\n".format(read2.query_name, read2.seq,
+                                               read2.qual))
 
 def print_fastq(outfile1=None, outfile2=None, read1=None, read2=None):
     outfile1.write("@{}\n{}\n+\n{}\n".format(read1.query_name, read1.seq,
@@ -45,7 +52,7 @@ def print_fastq(outfile1=None, outfile2=None, read1=None, read2=None):
 
 
 def main():
-    desc='''
+    desc = '''
     Detect and isolate human reads from a bam file generated from human(SEQ)
     aligned to mouse(REF).  Accepts either: a file, or sam data piped from stdin.
     NOTE: when reading from stdin, you must provide the SAM headers "@" via
@@ -54,17 +61,18 @@ def main():
     parser = argparse.ArgumentParser(description=desc)
     parser.add_argument('-b', dest='bam', default='-',
                         help="Input .bam (unsorted) [stdin]")
-    parser.add_argument('-o', dest='output', required=True,
+    parser.add_argument('-o', dest='output', required=False,
                         help='Output stub e.g. Human.fastq')
     parser.add_argument('-c', dest='compression', required=False, default=4,
                         type=int,
                         help='Optional fq.gz compression rate [default: 4]')
     args = parser.parse_args()
 
-    fq1 = gzip.open(args.output + '_1.fq.gz', 'w',
-                    compresslevel=args.compression)
-    fq2 = gzip.open(args.output + '_2.fq.gz', 'w',
-                    compresslevel=args.compression)
+    # fq1 = gzip.open(args.output + '_1.fq.gz', 'w',
+    #                 compresslevel=args.compression)
+    # fq2 = gzip.open(args.output + '_2.fq.gz', 'w',
+    #                 compresslevel=args.compression)
+    logfile = open('runlog.txt', 'w')
 
     pair_count = None
     t_start = datetime.datetime.now()
@@ -77,19 +85,20 @@ def main():
                     (len(pair[1].cigar) == 1 and pair[1].cigar[0][0] == 0)):
                 pass
             else:
-                print_fastq(outfile1=fq1, outfile2=fq2,
-                            read1=pair[0], read2=pair[1])
+                #  Consider sending imperfect alignments to other pair of files
+                # print_fastq(outfile1=fq1, outfile2=fq2, read1=pair[0], read2=pair[1])
+                print_fastq_to_pipes(read1=pair[0], read2=pair[1])
         else:
-            print_fastq(outfile1=fq1, outfile2=fq2,
-                        read1=pair[0], read2=pair[1])
+            # print_fastq(outfile1=fq1, outfile2=fq2, read1=pair[0], read2=pair[1])
+            print_fastq_to_pipes(read1=pair[0], read2=pair[1])
 
     t_end = datetime.datetime.now()
     time_delta = t_end - t_start
     pct = (keep_count + 0.0) / pair_count * 100
-    print "{} total reads".format(total_reads)
-    print "kept {} primary alignment pairs out of {}  %{:.4f}".format(
+    print >>logfile, "{} total reads".format(total_reads)
+    print >>logfile, "kept {} primary alignment pairs out of {}  %{:.4f}".format(
         keep_count, pair_count, pct)
-    print "time: {}".format(str(time_delta))
+    print >>logfile, "time: {}".format(str(time_delta))
 
 if __name__ == '__main__':
     main()
