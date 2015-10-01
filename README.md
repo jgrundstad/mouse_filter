@@ -44,7 +44,7 @@ $ ./stream_run.sh
 ```
 This method utilizes standard streams to pipe fastq data through gzip.  
 
-stdout -> _1.fq.gz
-stderr -> _2.fq.gz
+- stdout -> _1.fq.gz
+- stderr -> _2.fq.gz
 
 Logging information is captured in runlog.txt, however, error messages will be sent to _2.fq.gz
