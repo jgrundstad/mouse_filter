@@ -8,13 +8,18 @@ process leading up to this point:
   2. Generate a list of germline variants comparing the Mouse strain to mm10.
   3. Generate a custom reference by altering mm10 with the germline variants.
 2. Align PDX sample reads to the custom reference
-3. Isolate reads from all unaligned and imperfect alignments (using this tool!)
+
+At this point, we need to filter out all the reads that appear to have come from the host:
+
+3. Isolate reads from all unaligned and imperfect alignments
   * Output: 
     * Human_1.fq.gz
     * Human_2.fq.gz
     - ambiguous.bam
-4. Investigate the ambiguous reads with Strain specific annotation, likely this will be added in to the Fastqs
+4. Investigate the ambiguous reads with Strain specific annotation, likely this will be added in to the Fastqs.
 
+The script can be run in two modes:
+#### Python
 ```bash
 usage: read_bam.py [-h] [-b BAM] -o OUTPUT [-c COMPRESSION]
 
@@ -30,4 +35,16 @@ optional arguments:
   -c COMPRESSION  Optional fq.gz compression rate [default: 4]
 ```
 
-Note:  -m flag not implemented yet.
+#### Bash
+```bash
+$ ./stream_run.sh 
+-b    Bam file to be processed
+-o    output file stub
+-h    this message
+```
+This method utilizes standard streams to pipe fastq data through gzip.  
+
+stdout -> _1.fq.gz
+stderr -> _2.fq.gz
+
+Logging information is captured in runlog.txt, however, error messages will be sent to _2.fq.gz
