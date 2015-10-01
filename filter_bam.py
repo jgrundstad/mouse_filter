@@ -6,7 +6,6 @@ import sys
 
 __author__ = 'A. Jason Grundstad'
 
-keep_count = 0
 total_reads = 0
 
 def read_bam(bamfile):
@@ -36,23 +35,25 @@ def read_bam(bamfile):
             read1 = bam.next()
             total_reads += 1
 
+
 def print_fastq_to_pipes(read1=None, read2=None, **kwargs):
     sys.stdout.write("@{}\n{}\n+\n{}\n".format(read1.query_name, read1.seq,
                                                read1.qual))
     sys.stderr.write("@{}\n{}\n+\n{}\n".format(read2.query_name, read2.seq,
                                                read2.qual))
 
+
 def print_fastq(outfile1=None, outfile2=None, read1=None, read2=None):
     outfile1.write("@{}\n{}\n+\n{}\n".format(read1.query_name, read1.seq,
                                              read1.qual))
     outfile2.write("@{}\n{}\n+\n{}\n".format(read2.query_name, read2.seq,
                                              read2.qual))
-    global keep_count
-    keep_count += 1
 
 
 def evaluate(bam=None, fq1=None, fq2=None):
     pair_count = 0
+    keep_count = 0
+    ambiguous_count = 0
     print_it = print_fastq
     if fq1 is None:
         print_it = print_fastq_to_pipes
@@ -67,9 +68,11 @@ def evaluate(bam=None, fq1=None, fq2=None):
             else:
                 #  Consider sending imperfect alignments to other pair of files
                 print_it(outfile1=fq1, outfile2=fq2, read1=pair[0], read2=pair[1])
+                ambiguous_count += 1
         else:
             print_it(outfile1=fq1, outfile2=fq2, read1=pair[0], read2=pair[1])
-    return pair_count
+            keep_count += 1
+    return pair_count, keep_count, ambiguous_count
 
 def main():
     desc = '''
@@ -88,8 +91,7 @@ def main():
                         help='Optional fq.gz compression rate [default: 4]')
     args = parser.parse_args()
 
-    logfile = open('runlog.txt', 'w')
-
+    logfile = open('runlog.txt', 'a')
     fq1 = None
     fq2 = None
     if args.output:
@@ -99,15 +101,22 @@ def main():
                         compresslevel=args.compression)
 
     t_start = datetime.datetime.now()
-    pair_count = evaluate(fq1=fq1, fq2=fq2, bam=args.bam)
+    print >>logfile, "----------\nStart time: {}".format(t_start)
+    pair_count, keep_count, ambiguous_count = evaluate(
+        fq1=fq1, fq2=fq2, bam=args.bam)
     t_end = datetime.datetime.now()
+    print >>logfile, "End time:   {}".format(t_end)
 
     time_delta = t_end - t_start
-    pct = (keep_count + 0.0) / pair_count * 100
+    keep_pct = (keep_count + 0.0) / pair_count * 100
+    ambig_pct = (ambiguous_count + 0.0) / pair_count * 100
+    global total_reads
     print >>logfile, "{} total reads".format(total_reads)
-    print >>logfile, "kept {} primary alignment pairs out of {}  %{:.4f}".format(
-        keep_count, pair_count, pct)
-    print >>logfile, "time: {}".format(str(time_delta))
+    print >>logfile, "kept {} alignment pairs out of {}  %{:.4f}".format(
+        keep_count, pair_count, keep_pct)
+    print >>logfile, "kept {} ambiguous alignment pairs out of {}  %{:.4f}".format(
+        ambiguous_count, pair_count, ambig_pct)
+    print >>logfile, "time delta: {}".format(str(time_delta))
 
 if __name__ == '__main__':
     main()
