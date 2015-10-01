@@ -51,6 +51,26 @@ def print_fastq(outfile1=None, outfile2=None, read1=None, read2=None):
     keep_count += 1
 
 
+def evaluate(bam=None, fq1=None, fq2=None):
+    pair_count = 0
+    print_it = print_fastq
+    if fq1 is None:
+        print_it = print_fastq_to_pipes
+
+    for pair_count, pair in enumerate(read_bam(bam), start=1):
+        # do we have alignments
+        if not (pair[0].is_unmapped and pair[1].is_unmapped):
+            # are both alignments perfect, pass it over
+            if ((len(pair[0].cigar) == 1 and pair[0].cigar[0][0] == 0) and
+                    (len(pair[1].cigar) == 1 and pair[1].cigar[0][0] == 0)):
+                pass
+            else:
+                #  Consider sending imperfect alignments to other pair of files
+                print_it(outfile1=fq1, outfile2=fq2, read1=pair[0], read2=pair[1])
+        else:
+            print_it(outfile1=fq1, outfile2=fq2, read1=pair[0], read2=pair[1])
+    return pair_count
+
 def main():
     desc = '''
     Detect and isolate human reads from a bam file generated from human(SEQ)
@@ -68,31 +88,20 @@ def main():
                         help='Optional fq.gz compression rate [default: 4]')
     args = parser.parse_args()
 
-    # fq1 = gzip.open(args.output + '_1.fq.gz', 'w',
-    #                 compresslevel=args.compression)
-    # fq2 = gzip.open(args.output + '_2.fq.gz', 'w',
-    #                 compresslevel=args.compression)
     logfile = open('runlog.txt', 'w')
 
-    pair_count = None
+    fq1 = None
+    fq2 = None
+    if args.output:
+        fq1 = gzip.open(args.output + '_1.fq.gz', 'w',
+                        compresslevel=args.compression)
+        fq2 = gzip.open(args.output + '_2.fq.gz', 'w',
+                        compresslevel=args.compression)
+
     t_start = datetime.datetime.now()
-
-    for pair_count, pair in enumerate(read_bam(args.bam), start=1):
-        # do we have alignments
-        if not (pair[0].is_unmapped and pair[1].is_unmapped):
-            # are both alignments perfect, pass it over
-            if ((len(pair[0].cigar) == 1 and pair[0].cigar[0][0] == 0) and
-                    (len(pair[1].cigar) == 1 and pair[1].cigar[0][0] == 0)):
-                pass
-            else:
-                #  Consider sending imperfect alignments to other pair of files
-                # print_fastq(outfile1=fq1, outfile2=fq2, read1=pair[0], read2=pair[1])
-                print_fastq_to_pipes(read1=pair[0], read2=pair[1])
-        else:
-            # print_fastq(outfile1=fq1, outfile2=fq2, read1=pair[0], read2=pair[1])
-            print_fastq_to_pipes(read1=pair[0], read2=pair[1])
-
+    pair_count = evaluate(fq1=fq1, fq2=fq2, bam=args.bam)
     t_end = datetime.datetime.now()
+
     time_delta = t_end - t_start
     pct = (keep_count + 0.0) / pair_count * 100
     print >>logfile, "{} total reads".format(total_reads)
