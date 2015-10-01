@@ -42,7 +42,7 @@ $ ./stream_run.sh
 -o    output file stub
 -h    this message
 ```
-This method utilizes standard streams to pipe fastq data through gzip.  
+This method has some performance gains by utilizing standard streams to pipe fastq data through gzip.  
 
 - stdout -> _1.fq.gz
 - stderr -> _2.fq.gz
