@@ -36,7 +36,7 @@ def read_bam(bamfile):
             read1 = bam.next()
             total_reads += 1
 
-def print_fastq_to_pipes(read1=None, read2=None):
+def print_fastq_to_pipes(read1=None, read2=None, **kwargs):
     sys.stdout.write("@{}\n{}\n+\n{}\n".format(read1.query_name, read1.seq,
                                                read1.qual))
     sys.stderr.write("@{}\n{}\n+\n{}\n".format(read2.query_name, read2.seq,
