@@ -61,9 +61,10 @@ def evaluate(bam=None, fq1=None, fq2=None):
     for pair_count, pair in enumerate(read_bam(bam), start=1):
         # do we have alignments
         if not (pair[0].is_unmapped and pair[1].is_unmapped):
-            ''' are both alignments perfect, pass it over
+            ''' are both alignments perfect, pass it over unless:
+            *  read1.reference_id != read2.reference_id
             *  NM in read.tags indicates edit distance from reference
-            *  insert size: abs(read1.positions[-1] - read2.positions[0])
+            *  insert size: read1.isize , negative for read2
             '''
             if ((len(pair[0].cigar) == 1 and pair[0].cigar[0][0] == 0) and
                     (len(pair[1].cigar) == 1 and pair[1].cigar[0][0] == 0)):
