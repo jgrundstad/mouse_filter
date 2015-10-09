@@ -7,6 +7,7 @@ import sys
 __author__ = 'A. Jason Grundstad'
 
 total_reads = 0
+window = 500
 
 def read_bam(bamfile):
     global total_reads
@@ -50,6 +51,19 @@ def print_fastq(outfile1=None, outfile2=None, read1=None, read2=None):
                                              read2.qual))
 
 
+def both_mapped(read1, read2):
+    return not (read1.is_unmapped and read2.is_unmapped)
+
+
+def mated(read1, read2):
+    return (read1.rname == read2.rname) and (abs(read1.isize) < window)
+
+
+def perfect_alignments(read1, read2):
+    return ((len(read1.cigar) == 1 and read1.cigar[0][0] == 0) and
+            (len(read2.cigar) == 1 and read2.cigar[0][0] == 0))
+
+
 def evaluate(bam=None, fq1=None, fq2=None):
     pair_count = 0
     keep_count = 0
@@ -66,8 +80,9 @@ def evaluate(bam=None, fq1=None, fq2=None):
             *  NM in read.tags indicates edit distance from reference
             *  insert size: read1.isize , negative for read2
             '''
-            if ((len(pair[0].cigar) == 1 and pair[0].cigar[0][0] == 0) and
-                    (len(pair[1].cigar) == 1 and pair[1].cigar[0][0] == 0)):
+            if (both_mapped(pair[0], pair[1]) and
+                    mated(pair[0], pair[1]) and
+                    perfect_alignments(pair[0], pair[1])):
                 pass
             else:
                 #  Consider sending imperfect alignments to other pair of files
@@ -77,6 +92,7 @@ def evaluate(bam=None, fq1=None, fq2=None):
             print_it(outfile1=fq1, outfile2=fq2, read1=pair[0], read2=pair[1])
             keep_count += 1
     return pair_count, keep_count, ambiguous_count
+
 
 def main():
     desc = '''
