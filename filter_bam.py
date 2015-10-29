@@ -17,12 +17,12 @@ def read_bam(bamfile):
     total_reads += 1
     read2 = None
     while read1:
-        while read1.is_secondary and not read1.is_read1 and not read1.is_supplementary:
+        while read1.is_secondary and not read1.is_read1 or read1.flag & 2048:
             read1 = bam.next()
             total_reads += 1
         read2 = bam.next()
         total_reads += 1
-        while read2.is_secondary and not read2.is_read2 and not read2.is_supplementary:
+        while read2.is_secondary and not read2.is_read2 or read2.flag & 2048:
             read2 = bam.next()
             total_reads += 1
         if read1.query_name != read2.query_name:
