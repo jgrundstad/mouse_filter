@@ -9,6 +9,7 @@ __author__ = 'A. Jason Grundstad'
 total_reads = 0
 window = 500
 
+
 def read_bam(bamfile):
     global total_reads
     bam = pysam.AlignmentFile(bamfile, 'rb')
@@ -16,12 +17,12 @@ def read_bam(bamfile):
     total_reads += 1
     read2 = None
     while read1:
-        while read1.is_secondary and not read1.is_read1:
+        while read1.is_secondary and not read1.is_read1 and not read1.is_supplementary:
             read1 = bam.next()
             total_reads += 1
         read2 = bam.next()
         total_reads += 1
-        while read2.is_secondary and not read2.is_read2:
+        while read2.is_secondary and not read2.is_read2 and not read2.is_supplementary:
             read2 = bam.next()
             total_reads += 1
         if read1.query_name != read2.query_name:
