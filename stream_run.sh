@@ -7,6 +7,8 @@ function helptext {
 }
 [[ $# -gt 0 ]] || { helptext; }
 
+MYDIR="$(dirname "$(which "$0")")"
+
 while getopts o:b:h OPT; do
     case $OPT in
         o)
@@ -25,4 +27,4 @@ while getopts o:b:h OPT; do
     esac
 done
 
-{ python filter_bam.py -b ${BAM} | gzip -4 -c - > ${OUTSTUB}_1.fq.gz; } 2>&1 | gzip -4 -c - > ${OUTSTUB}_2.fq.gz
+{ python ${MYDIR}/filter_bam.py -b ${BAM} | gzip -4 -c - > ${OUTSTUB}_1.fq.gz; } 2>&1 | gzip -4 -c - > ${OUTSTUB}_2.fq.gz
